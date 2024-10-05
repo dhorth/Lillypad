@@ -1,4 +1,27 @@
 #!/usr/bin/env python3
+####################################################################
+# Lillypad Restoration Slideshow
+#-------------------------------------------------------------------
+#
+#This application is designed to display a slideshow of images on a
+# portion of a Raspberry Pi display. It was originally created for a
+# vintage TV that no longer worked. We replaced the old tube display
+# with an LCD monitor and a Raspberry Pi. Since the LCD screen was 
+# smaller than the original tube, the slideshow needed to use only a
+# portion of the screen.
+#
+#The application uses Pygame to position and display images at a 
+# preconfigured location on the screen. You can adjust both the size
+# of the image and the position of its top-left corner by modifying 
+# the settings below.
+#
+#Additionally, the program detects when a USB device is inserted, 
+# scans the drive for images, and begins the slideshow automatically.
+# While the slideshow works best if the images are the same size as 
+# the configured image_size, the application can resize and crop 
+# images that are different sizes to fit the display.
+####################################################################
+
 import argparse
 import os
 import stat
@@ -16,9 +39,10 @@ file_list = []  # a list of all images being shown
 title = "Lillypad Restoration Slideshow!"  # caption of the window...
 waittime = 30   # default time to wait between images (in seconds)
 white=(255,255,255)
-image_location=(100,50)
-image_size=(1280,1080)
-fadeSpeed=50
+image_location=(100,50) #the actual location of the image on the display, adjust this to center the image for your output device
+image_size=(1280,1080) #default size of the image, this should match the width and height of your output device
+fadeSpeed=50  #the speed of the slideshow
+
 startdir="/mnt/usb"
 logo="/home/pi/Icon.png"
 
@@ -39,6 +63,8 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
+
+# Initalize PyGame and set the display to fullscreen
 def init_pygame():
     try:
         logging.debug("init pygame")
@@ -88,10 +114,8 @@ def init_pygame():
         logging.error('PY GAME: An exception occurred: {}'.format(e))
 
 
+#Recursively descend the directory tree rooted at top, calling the callback function for each regular file
 def walktree(dir,callback):
-    """Recursively descend the directory tree rooted at top, calling the
-    callback function for each regular file.
-    """
     logging.debug("walktree "+dir)
     for f in os.listdir(dir):
         pathname = os.path.join(dir, f)
@@ -107,8 +131,8 @@ def walktree(dir,callback):
             logging.info(f'Skipping {pathname}')
 
 
+#Add a file to a global list of image files.
 def addtolist(file, extensions=['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
-    """Add a file to a global list of image files."""
     global file_list  # ugh
     filename, ext = os.path.splitext(file)
     e = ext.lower()
@@ -118,8 +142,8 @@ def addtolist(file, extensions=['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
         file_list.append(file)
 
 
+#A function to handle keyboard/mouse/device input events.
 def handle_input(events):
-    """A function to handle keyboard/mouse/device input events."""
     for event in events:  # Hit the ESC key to quit the slideshow.
         if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
             pygame.quit()
@@ -127,7 +151,7 @@ def handle_input(events):
             print("Shutting down - keyboard interrupt")
             sys.exit()
       
-# Function to fade in an image
+# Function to fade in an image at the specified location on the display
 def fade_in(screen, image, speed=fadeSpeed):
     for alpha in range(0, 256, speed):
         image.set_alpha(alpha)
@@ -146,20 +170,22 @@ def fade_out(screen, image, speed=fadeSpeed):
         pygame.time.delay(20)
 
         
+# Get the image from the list and fade in and out
 def show_image(screen, imageName):
     try:
         logging.debug("Show Image "+imageName)
         img = pygame.image.load(imageName)
+
         img = crop_and_resize(img)
+
         img = img.convert_alpha()
+
         # Rescale the image to fit the current display
-    #            img = pygame.transform.scale(img,max(modes))
         img=pygame.transform.scale(img,image_size)
-    #            screen.fill(white)
+
 
         fade_in(screen,img)
 
-    #            screen.blit(img, (0, 0))
         pygame.display.flip()
 
         handle_input(pygame.event.get())
@@ -178,8 +204,8 @@ def show_image(screen, imageName):
         time.sleep(5)
 
 
+#Crops and resizes the image to the target size (1024x1024) while maintaining the aspect ratio.
 def crop_and_resize(image, target_size=(1024, 1024)):
-    """Crops and resizes the image to the target size (1024x1024) while maintaining the aspect ratio."""
     
     # Get the original image size
     img_width, img_height = image.get_size()
@@ -211,6 +237,7 @@ def crop_and_resize(image, target_size=(1024, 1024)):
     return resized_image        
 
 
+#  Depending on how the LCD display is mounted you may need to rotate screen
 def rotate_display():
     logging.debug("rotate display")
     # Replace HDMI-1 with your actual display output name
@@ -226,13 +253,13 @@ def rotate_display():
         logging.info("Failed to rotate display.")
 
 
+#Check if the device is mounted at the given mount point.
 def device_mounted(mount_point):
-    """Check if the device is mounted at the given mount point."""
     return os.path.ismount(mount_point)
 
 
+#Monitor USB insert and remove events.
 def monitor_usb_events():
-    """Monitor USB insert and remove events."""
     context = pyudev.Context()
     monitor = pyudev.Monitor.from_netlink(context)
     monitor.filter_by(subsystem='block', device_type='partition')
@@ -243,8 +270,8 @@ def monitor_usb_events():
         handle_device_changes(device, action)
 
 
+#Detects the USB device by scanning the connected block devices.
 def get_device_name():
-    """Detects the USB device by scanning the connected block devices."""
     logging.info("Looking for USB device...")
 
     # Run lsblk and capture the output
@@ -264,8 +291,9 @@ def get_device_name():
     return None
 
 
+#Mount the USB device.
 def mount_device(device_name, mount_point):
-    """Mount the USB device."""
+    """"""
     logging.debug(f"Mounting device {device_name} at {mount_point}")
     try:
         if not os.path.ismount(mount_point):
@@ -277,8 +305,9 @@ def mount_device(device_name, mount_point):
         logging.error(f"Failed to mount {device_name}: {e}")
 
 
+#Unmount the USB device if it's mounted.
 def unmount_device(mount_point):
-    """Unmount the USB device if it's mounted."""
+    """"""
     logging.debug(f"Unmounting device at {mount_point}")
     try:
         subprocess.run(['sudo', 'umount', mount_point], check=True)
@@ -287,8 +316,8 @@ def unmount_device(mount_point):
         logging.error(f"Failed to unmount device: {e}")
 
 
+#Handle USB device insertion or removal.
 def handle_device_changes(device, action):
-    """Handle USB device insertion or removal."""
     if action == "add":
         logging.info("USB device inserted and mounted.")
         device_name = get_device_name()
@@ -305,6 +334,7 @@ def handle_device_changes(device, action):
         file_list.clear()
         unmount_device(startdir)
 
+# Main
 def main():
     global file_list, title, waittime
     print("Slideshow starting")
